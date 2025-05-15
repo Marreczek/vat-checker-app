@@ -4,14 +4,16 @@ import uuid
 from datetime import datetime
 import openpyxl
 from io import BytesIO
-import os
+import re
 
 app = Flask(__name__)
 
+
 def sprawdz_nip_w_vat(nip):
-    nip = str(nip).replace('-', '').strip()
+    nip = re.sub(r"\D", "", str(nip))  # usuwa wszystko poza cyframi
     if not nip.isdigit() or len(nip) != 10:
         return nip, "Nieprawidłowy NIP", "Błąd"
+    ...
 
     base_url = "https://wl-api.mf.gov.pl/api/search/nip/"
     today = datetime.today().strftime('%Y-%m-%d')

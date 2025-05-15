@@ -16,9 +16,11 @@
 
     <form method="POST" enctype="multipart/form-data" id="upload-form">
         <div class="mb-4">
-            <label for="nip" class="form-label">Lub wpisz pojedynczy NIP:</label>
-         <input type="text" name="nip" id="nip" class="form-control" placeholder="1234567890">
+             <label for="nip" class="form-label">Lub wpisz pojedynczy NIP:</label>
+             <input type="text" name="nip" id="nip" class="form-control" placeholder="np. 123-456-32-18" maxlength="14">
+             <div class="form-text">Wprowadź 10 cyfr, myślniki i spacje zostaną automatycznie usunięte.</div>
         </div>
+
 
         <div class="mb-4">
          <label for="plik" class="form-label">Lub załaduj plik Excel (.xlsx):</label>
@@ -38,6 +40,13 @@ document.getElementById('upload-form').addEventListener('submit', function () {
     document.getElementById('submit-btn').disabled = true;
     document.getElementById('submit-text').textContent = 'Trwa sprawdzanie...';
     document.getElementById('spinner').classList.remove('d-none');
+});
+</script>
+
+<script>
+document.getElementById("nip").addEventListener("input", function () {
+    // Usuń wszystkie znaki niebędące cyframi i ogranicz do 10 znaków
+    this.value = this.value.replace(/\D/g, "").slice(0, 10);
 });
 </script>
 
