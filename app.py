@@ -91,3 +91,9 @@ def pobierz():
     if not os.path.exists("ostatnie_wyniki.xlsx"):
         return "Brak pliku do pobrania", 404
     return send_file("ostatnie_wyniki.xlsx", as_attachment=True)
+
+import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
