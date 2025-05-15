@@ -66,25 +66,33 @@ def generuj_excel(wyniki):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
+        nip_input = request.form.get("nip", "").strip()
         plik = request.files.get("plik")
-        if not plik or not plik.filename.endswith(".xlsx"):
-            return render_template("index.html", blad="Wgraj poprawny plik .xlsx.")
 
-        try:
-            nipy = wczytaj_nipy_z_excel(plik)
-            wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
+        wyniki = []
 
-            # Tymczasowe zapisanie do sesji lub pliku — tu zapisujemy do pliku tymczasowego
-            excel_data = generuj_excel(wyniki)
-            with open("ostatnie_wyniki.xlsx", "wb") as f:
-                f.write(excel_data.read())
+        if nip_input:
+            wynik = sprawdz_nip_w_vat(nip_input)
+            wyniki.append(wynik)
 
-            return render_template("wyniki.html", wyniki=wyniki)
+        elif plik and plik.filename.endswith(".xlsx"):
+            try:
+                nipy = wczytaj_nipy_z_excel(plik)
+                wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
+            except Exception as e:
+                return render_template("index.html", blad=f"Błąd przy odczycie pliku: {e}")
+        else:
+            return render_template("index.html", blad="Wpisz NIP lub załaduj plik .xlsx.")
 
-        except Exception as e:
-            return render_template("index.html", blad=f"Błąd: {e}")
+        # zapis do pliku do pobrania
+        excel_data = generuj_excel(wyniki)
+        with open("ostatnie_wyniki.xlsx", "wb") as f:
+            f.write(excel_data.read())
+
+        return render_template("wyniki.html", wyniki=wyniki)
 
     return render_template("index.html")
+
 
 
 @app.route("/pobierz")

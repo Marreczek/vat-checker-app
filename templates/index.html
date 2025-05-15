@@ -15,15 +15,22 @@
     {% endif %}
 
     <form method="POST" enctype="multipart/form-data" id="upload-form">
-        <div class="mb-3">
-            <label for="plik" class="form-label">Plik Excel z NIP-ami (.xlsx):</label>
-            <input type="file" name="plik" id="plik" accept=".xlsx" class="form-control" required>
+        <div class="mb-4">
+            <label for="nip" class="form-label">Lub wpisz pojedynczy NIP:</label>
+         <input type="text" name="nip" id="nip" class="form-control" placeholder="1234567890">
         </div>
+
+        <div class="mb-4">
+         <label for="plik" class="form-label">Lub załaduj plik Excel (.xlsx):</label>
+         <input type="file" name="plik" id="plik" accept=".xlsx" class="form-control">
+        </div>
+
         <button type="submit" class="btn btn-primary" id="submit-btn">
-            <span id="submit-text">Sprawdź</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status" id="spinner" aria-hidden="true"></span>
+          <span id="submit-text">Sprawdź</span>
+         <span class="spinner-border spinner-border-sm d-none" role="status" id="spinner" aria-hidden="true"></span>
         </button>
     </form>
+
 </div>
 
 <script>
