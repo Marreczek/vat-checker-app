@@ -1,5 +1,4 @@
 import os
-import threading
 import uuid
 import re
 from io import BytesIO
@@ -68,22 +67,6 @@ def generuj_excel(wyniki):
     stream.seek(0)
     return stream
 
-# --- Słownik do przechowywania statusów zadań ---
-statusy = {}
-
-# --- Funkcja przetwarzająca plik w tle ---
-def przetworz_plik(task_id, plik):
-    try:
-        nipy = wczytaj_nipy_z_excel(plik)
-        wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
-        excel = generuj_excel(wyniki)
-        sciezka = os.path.join(wyniki_folder, f"{task_id}.xlsx")
-        with open(sciezka, "wb") as f:
-            f.write(excel.read())
-        statusy[task_id] = ("gotowe", sciezka)
-    except Exception as e:
-        statusy[task_id] = ("blad", str(e))
-
 # --- Główna strona ---
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -96,35 +79,20 @@ def index():
             return render_template("wyniki.html", wyniki=[wynik])
 
         elif plik and plik.filename.endswith(".xlsx"):
-            task_id = str(uuid.uuid4())
-            statusy[task_id] = ("w trakcie", None)
-            threading.Thread(target=przetworz_plik, args=(task_id, plik)).start()
-            return redirect(url_for("status", task_id=task_id))
+            nipy = wczytaj_nipy_z_excel(plik)
+            wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
+            excel = generuj_excel(wyniki)
+            # zwróć plik excel bezpośrednio jako odpowiedź
+            return send_file(
+                excel,
+                as_attachment=True,
+                download_name="wyniki_nip.xlsx",
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
         else:
             return render_template("index.html", blad="Wpisz NIP lub załaduj plik .xlsx.")
     return render_template("index.html")
-
-# --- Status przetwarzania ---
-@app.route("/status/<task_id>")
-def status(task_id):
-    stan = statusy.get(task_id, ("nieznany", None))
-    if stan[0] == "w trakcie":
-        return f"⏳ Trwa przetwarzanie... <br><a href='{url_for('status', task_id=task_id)}'>Odśwież</a>"
-    elif stan[0] == "gotowe":
-        return f"✅ Gotowe! <a href='{url_for('pobierz_wynik', task_id=task_id)}'>Pobierz wyniki</a>"
-    elif stan[0] == "blad":
-        return f"❌ Błąd: {stan[1]}"
-    else:
-        return "Nie znaleziono zadania."
-
-# --- Pobieranie gotowego pliku ---
-@app.route("/pobierz/<task_id>")
-def pobierz_wynik(task_id):
-    stan = statusy.get(task_id, (None, None))
-    if stan[0] == "gotowe":
-        return send_file(stan[1], as_attachment=True)
-    return "Plik niedostępny."
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
