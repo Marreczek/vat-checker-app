@@ -76,7 +76,8 @@ def index():
 
             # Tymczasowe zapisanie do sesji lub pliku — tu zapisujemy do pliku tymczasowego
             excel_data = generuj_excel(wyniki)
-            excel_data.save("ostatnie_wyniki.xlsx")
+            with open("ostatnie_wyniki.xlsx", "wb") as f:
+                f.write(excel_data.read())
 
             return render_template("wyniki.html", wyniki=wyniki)
 
