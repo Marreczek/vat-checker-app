@@ -1,15 +1,12 @@
-import os
-import uuid
-import time
-from datetime import datetime
-from flask import Flask, request, render_template, send_file, redirect
-import openpyxl
+from flask import Flask, request, render_template, send_file, redirect, url_for
 import requests
+import uuid
+from datetime import datetime
+import openpyxl
 from io import BytesIO
+import os
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def sprawdz_nip_w_vat(nip):
     nip = str(nip).replace('-', '').strip()
@@ -43,8 +40,8 @@ def sprawdz_nip_w_vat(nip):
     except Exception as e:
         return nip, "Błąd zapytania", str(e)
 
-def wczytaj_nipy_z_excel(plik):
-    wb = openpyxl.load_workbook(plik)
+def wczytaj_nipy_z_excel(file_stream):
+    wb = openpyxl.load_workbook(file_stream)
     ws = wb.active
     nipy = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -53,7 +50,7 @@ def wczytaj_nipy_z_excel(plik):
             nipy.append(str(nip).strip())
     return nipy
 
-def zapisz_do_excel(wyniki):
+def generuj_excel(wyniki):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Wyniki"
@@ -69,24 +66,28 @@ def zapisz_do_excel(wyniki):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        if "plik" not in request.files:
-            return "Nie przesłano pliku", 400
+        plik = request.files.get("plik")
+        if not plik or not plik.filename.endswith(".xlsx"):
+            return render_template("index.html", blad="Wgraj poprawny plik .xlsx.")
 
-        plik = request.files["plik"]
-        if plik.filename == "":
-            return "Nie wybrano pliku", 400
+        try:
+            nipy = wczytaj_nipy_z_excel(plik)
+            wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
 
-        nipy = wczytaj_nipy_z_excel(plik)
-        wyniki = []
-        for nip in nipy:
-            wynik = sprawdz_nip_w_vat(nip)
-            wyniki.append(wynik)
-            time.sleep(0.3)  # przerwa dla API
+            # Tymczasowe zapisanie do sesji lub pliku — tu zapisujemy do pliku tymczasowego
+            excel_data = generuj_excel(wyniki)
+            excel_data.save("ostatnie_wyniki.xlsx")
 
-        wynikowy_plik = zapisz_do_excel(wyniki)
-        return send_file(wynikowy_plik, download_name="wyniki_nip.xlsx", as_attachment=True)
+            return render_template("wyniki.html", wyniki=wyniki)
+
+        except Exception as e:
+            return render_template("index.html", blad=f"Błąd: {e}")
 
     return render_template("index.html")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+
+@app.route("/pobierz")
+def pobierz():
+    if not os.path.exists("ostatnie_wyniki.xlsx"):
+        return "Brak pliku do pobrania", 404
+    return send_file("ostatnie_wyniki.xlsx", as_attachment=True)
