@@ -1,36 +1,39 @@
-from flask import Flask, request, render_template, send_file, redirect, url_for
-import requests
+import os
+import threading
 import uuid
-from datetime import datetime
-import openpyxl
-from io import BytesIO
 import re
+from io import BytesIO
+from flask import Flask, request, render_template, redirect, url_for, send_file
+from datetime import datetime
+import requests
+import openpyxl
 
 app = Flask(__name__)
 
+# Folder na wyniki - twórz, jeśli nie istnieje
+wyniki_folder = "wyniki"
+os.makedirs(wyniki_folder, exist_ok=True)
 
+# --- Funkcja do sprawdzania NIP w rejestrze VAT ---
 def sprawdz_nip_w_vat(nip):
-    nip = re.sub(r"\D", "", str(nip))  # usuwa wszystko poza cyframi
+    nip = re.sub(r"\D", "", str(nip))  # usuń wszystko poza cyframi
     if not nip.isdigit() or len(nip) != 10:
         return nip, "Nieprawidłowy NIP", "Błąd"
-    ...
 
     base_url = "https://wl-api.mf.gov.pl/api/search/nip/"
     today = datetime.today().strftime('%Y-%m-%d')
-    request_id = str(uuid.uuid4())
-
     url = f"{base_url}{nip}?date={today}"
     headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'RequestId': request_id
+        'RequestId': str(uuid.uuid4())
     }
 
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             result = response.json()
-            subject = result['result']['subject']
+            subject = result.get('result', {}).get('subject')
             if subject:
                 nazwa = subject.get('name', 'Brak danych')
                 status_vat = subject.get('statusVat', 'Nieznany')
@@ -42,8 +45,9 @@ def sprawdz_nip_w_vat(nip):
     except Exception as e:
         return nip, "Błąd zapytania", str(e)
 
-def wczytaj_nipy_z_excel(file_stream):
-    wb = openpyxl.load_workbook(file_stream)
+# --- Wczytanie NIP-ów z pliku Excel ---
+def wczytaj_nipy_z_excel(plik):
+    wb = openpyxl.load_workbook(plik)
     ws = wb.active
     nipy = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -52,59 +56,75 @@ def wczytaj_nipy_z_excel(file_stream):
             nipy.append(str(nip).strip())
     return nipy
 
+# --- Generowanie pliku Excel z wynikami ---
 def generuj_excel(wyniki):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Wyniki"
     ws.append(["NIP", "Nazwa podmiotu", "Status VAT"])
-    for wiersz in wyniki:
-        ws.append(wiersz)
+    for w in wyniki:
+        ws.append(w)
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream
 
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
+# --- Słownik do przechowywania statusów zadań ---
+statusy = {}
 
+# --- Funkcja przetwarzająca plik w tle ---
+def przetworz_plik(task_id, plik):
+    try:
+        nipy = wczytaj_nipy_z_excel(plik)
+        wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
+        excel = generuj_excel(wyniki)
+        sciezka = os.path.join(wyniki_folder, f"{task_id}.xlsx")
+        with open(sciezka, "wb") as f:
+            f.write(excel.read())
+        statusy[task_id] = ("gotowe", sciezka)
+    except Exception as e:
+        statusy[task_id] = ("blad", str(e))
+
+# --- Główna strona ---
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         nip_input = request.form.get("nip", "").strip()
         plik = request.files.get("plik")
 
-        wyniki = []
-
         if nip_input:
             wynik = sprawdz_nip_w_vat(nip_input)
-            wyniki.append(wynik)
+            return render_template("wyniki.html", wyniki=[wynik])
 
         elif plik and plik.filename.endswith(".xlsx"):
-            try:
-                nipy = wczytaj_nipy_z_excel(plik)
-                wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
-            except Exception as e:
-                return render_template("index.html", blad=f"Błąd przy odczycie pliku: {e}")
+            task_id = str(uuid.uuid4())
+            statusy[task_id] = ("w trakcie", None)
+            threading.Thread(target=przetworz_plik, args=(task_id, plik)).start()
+            return redirect(url_for("status", task_id=task_id))
+
         else:
             return render_template("index.html", blad="Wpisz NIP lub załaduj plik .xlsx.")
-
-        # zapis do pliku do pobrania
-        excel_data = generuj_excel(wyniki)
-        with open("ostatnie_wyniki.xlsx", "wb") as f:
-            f.write(excel_data.read())
-
-        return render_template("wyniki.html", wyniki=wyniki)
-
     return render_template("index.html")
 
+# --- Status przetwarzania ---
+@app.route("/status/<task_id>")
+def status(task_id):
+    stan = statusy.get(task_id, ("nieznany", None))
+    if stan[0] == "w trakcie":
+        return f"⏳ Trwa przetwarzanie... <br><a href='{url_for('status', task_id=task_id)}'>Odśwież</a>"
+    elif stan[0] == "gotowe":
+        return f"✅ Gotowe! <a href='{url_for('pobierz_wynik', task_id=task_id)}'>Pobierz wyniki</a>"
+    elif stan[0] == "blad":
+        return f"❌ Błąd: {stan[1]}"
+    else:
+        return "Nie znaleziono zadania."
 
-
-@app.route("/pobierz")
-def pobierz():
-    if not os.path.exists("ostatnie_wyniki.xlsx"):
-        return "Brak pliku do pobrania", 404
-    return send_file("ostatnie_wyniki.xlsx", as_attachment=True)
-
-import os
+# --- Pobieranie gotowego pliku ---
+@app.route("/pobierz/<task_id>")
+def pobierz_wynik(task_id):
+    stan = statusy.get(task_id, (None, None))
+    if stan[0] == "gotowe":
+        return send_file(stan[1], as_attachment=True)
+    return "Plik niedostępny."
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=True)
