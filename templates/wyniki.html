@@ -2,51 +2,22 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Wyniki sprawdzenia NIP</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    body {
-      background: #f9f9f9;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    .container {
-      max-width: 700px;
-      margin-top: 60px;
-      padding: 25px 30px;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
-    }
-    h1 {
-      font-weight: 600;
-      margin-bottom: 25px;
-      color: #222;
-      text-align: center;
-    }
-    table {
-      font-size: 0.95rem;
-    }
-    /* Kolory statusów */
-    .status-aktywny {
-      color: #198754; /* Bootstrap green */
-      font-weight: 600;
-    }
-    .status-nieaktywny {
-      color: #dc3545; /* Bootstrap red */
-      font-weight: 600;
-    }
-    .status-brak, .status-blad, .status-nieznany {
-      color: #6c757d; /* Bootstrap gray */
-      font-style: italic;
-    }
+    .status-Błąd { color: red; font-weight: bold; }
+    .status-Brak { color: orange; font-weight: bold; }
+    .status-Nieznany { color: gray; font-weight: bold; }
+    .status-"Nieprawidłowy NIP" { color: red; font-weight: bold; }
+    .status-"Nie znaleziono w rejestrze" { color: orange; font-weight: bold; }
+    .status-"Błąd zapytania" { color: red; font-weight: bold; }
+    /* Możesz dodać więcej klas i kolorów wg statusu */
   </style>
 </head>
-<body>
+<body class="p-4">
   <div class="container">
-    <h1>Wyniki sprawdzenia NIP</h1>
-
-    <table class="table table-hover">
+    <h2>Wyniki sprawdzenia NIP</h2>
+    <table class="table table-striped mt-3">
       <thead>
         <tr>
           <th>NIP</th>
@@ -56,20 +27,20 @@
       </thead>
       <tbody>
         {% for nip, nazwa, status in wyniki %}
-          <tr>
-            <td>{{ nip }}</td>
-            <td>{{ nazwa }}</td>
-            <td class="{% if status.lower() == 'aktywny' %}status-aktywny{% elif status.lower() == 'nieaktywny' %}status-nieaktywny{% else %}status-brak{% endif %}">
-              {{ status }}
-            </td>
-          </tr>
+        <tr>
+          <td>{{ nip }}</td>
+          <td>{{ nazwa }}</td>
+          <td class="status-{{ status|replace(' ', '') }}">{{ status }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
 
-    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Wróć</a>
-  </div>
+    {% if not pojedynczy %}
+      <a href="{{ url_for('pobierz_wyniki') }}" class="btn btn-success mt-3">Pobierz wyniki do Excela</a>
+    {% endif %}
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Wróć</a>
+  </div>
 </body>
 </html>

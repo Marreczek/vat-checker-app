@@ -2,16 +2,14 @@ import os
 import uuid
 import re
 from io import BytesIO
-from flask import Flask, request, render_template, redirect, url_for, send_file
+from flask import Flask, request, render_template, redirect, url_for, send_file, session
 from datetime import datetime
 import requests
 import openpyxl
 
 app = Flask(__name__)
+app.secret_key = "tajny_klucz_do_sesji"  # potrzebny do sesji
 
-# Folder na wyniki - twórz, jeśli nie istnieje
-wyniki_folder = "wyniki"
-os.makedirs(wyniki_folder, exist_ok=True)
 
 # --- Funkcja do sprawdzania NIP w rejestrze VAT ---
 def sprawdz_nip_w_vat(nip):
@@ -44,6 +42,7 @@ def sprawdz_nip_w_vat(nip):
     except Exception as e:
         return nip, "Błąd zapytania", str(e)
 
+
 # --- Wczytanie NIP-ów z pliku Excel ---
 def wczytaj_nipy_z_excel(plik):
     wb = openpyxl.load_workbook(plik)
@@ -54,6 +53,7 @@ def wczytaj_nipy_z_excel(plik):
         if nip:
             nipy.append(str(nip).strip())
     return nipy
+
 
 # --- Generowanie pliku Excel z wynikami ---
 def generuj_excel(wyniki):
@@ -67,7 +67,8 @@ def generuj_excel(wyniki):
     stream.seek(0)
     return stream
 
-# --- Główna strona ---
+
+# --- Strona główna i obsługa formularza ---
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -76,24 +77,38 @@ def index():
 
         if nip_input:
             wynik = sprawdz_nip_w_vat(nip_input)
-            return render_template("wyniki.html", wyniki=[wynik])
+            return render_template("wyniki.html", wyniki=[wynik], pojedynczy=True)
 
         elif plik and plik.filename.endswith(".xlsx"):
             nipy = wczytaj_nipy_z_excel(plik)
             wyniki = [sprawdz_nip_w_vat(nip) for nip in nipy]
-            excel = generuj_excel(wyniki)
-            # zwróć plik excel bezpośrednio jako odpowiedź
-            return send_file(
-                excel,
-                as_attachment=True,
-                download_name="wyniki_nip.xlsx",
-                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+
+            # Zapisz wyniki w sesji
+            session['wyniki'] = wyniki
+
+            return render_template("wyniki.html", wyniki=wyniki, pojedynczy=False)
 
         else:
             return render_template("index.html", blad="Wpisz NIP lub załaduj plik .xlsx.")
     return render_template("index.html")
 
+
+# --- Endpoint do pobrania wyników z sesji ---
+@app.route("/pobierz_wyniki")
+def pobierz_wyniki():
+    wyniki = session.get('wyniki')
+    if not wyniki:
+        return redirect(url_for('index'))
+
+    excel = generuj_excel(wyniki)
+    return send_file(
+        excel,
+        as_attachment=True,
+        download_name="wyniki_nip.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=True, host="0.0.0.0", port=port)
